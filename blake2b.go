@@ -29,12 +29,12 @@ type digest struct {
 	x  [BlockSize]byte // buffer for data not yet compressed
 	nx int             // number of bytes in buffer
 
-	ih         [8]uint64       // initial chain value (after config)
-	paddedKey  [BlockSize]byte // copy of key, padded with zeros
-	isKeyed    bool            // indicates whether hash was keyed
-	size       uint8           // digest size in bytes
-	isLastNode bool            // indicates processing of the last node in tree hashing
-	sseOptimized bool		   // temp bool to indicate use of SSE (during dev only)
+	ih           [8]uint64       // initial chain value (after config)
+	paddedKey    [BlockSize]byte // copy of key, padded with zeros
+	isKeyed      bool            // indicates whether hash was keyed
+	size         uint8           // digest size in bytes
+	isLastNode   bool            // indicates processing of the last node in tree hashing
+	sseOptimized bool            // temp bool to indicate use of SSE (during dev only)
 }
 
 // Initialization values.
@@ -144,6 +144,7 @@ func (d *digest) initialize(c *Config) {
 		p[2] = 1
 		p[3] = 1
 	}
+
 	// Initialize.
 	d.size = c.Size
 	for i := 0; i < 8; i++ {
@@ -152,6 +153,10 @@ func (d *digest) initialize(c *Config) {
 	if c.Tree != nil && c.Tree.IsLastNode {
 		d.isLastNode = true
 	}
+
+	// Enable SSE if present.
+	d.sseOptimized = haveSSE()
+
 	// Process key.
 	if c.Key != nil {
 		copy(d.paddedKey[:], c.Key)
@@ -163,12 +168,9 @@ func (d *digest) initialize(c *Config) {
 }
 
 // New512 returns a new hash.Hash computing the BLAKE2b 64-byte checksum.
-func New512(enableSSE bool) hash.Hash {
+func New512() hash.Hash {
 	d := new(digest)
 	d.initialize(defaultConfig)
-	if enableSSE {
-		d.EnableSSE()
-	}
 	return d
 }
 
@@ -210,9 +212,6 @@ func (d *digest) Size() int { return int(d.size) }
 // BlockSize returns the algorithm block size in bytes.
 func (d *digest) BlockSize() int { return BlockSize }
 
-// Enable SSE
-func (d *digest) EnableSSE() { d.sseOptimized = true }
-
 func (d *digest) Write(p []byte) (nn int, err error) {
 	nn = len(p)
 	left := BlockSize - d.nx
@@ -246,11 +245,11 @@ func (d *digest) Write(p []byte) (nn int, err error) {
 }
 
 // Sum returns the calculated checksum.
-func (d0 *digest) Sum(in []byte) []byte {
-	// Make a copy of d0 so that caller can keep writing and summing.
-	d := *d0
-	hash := d.checkSum()
-	return append(in, hash[:d.size]...)
+func (d *digest) Sum(in []byte) []byte {
+	// Make a copy of d so that caller can keep writing and summing.
+	d0 := *d
+	hash := d0.checkSum()
+	return append(in, hash[:d0.size]...)
 }
 
 func (d *digest) checkSum() [Size]byte {

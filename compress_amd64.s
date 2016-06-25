@@ -241,3 +241,4 @@ TEXT ·compressSSE(SB), 7, $0
     MOVOU  X3, 48(DX)         // out[6]+out[7] = X3
 
     RET
+
